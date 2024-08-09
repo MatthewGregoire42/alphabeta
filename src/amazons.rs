@@ -1,4 +1,4 @@
-use std::{collections::HashSet, isize};
+use std::{collections::{HashSet, VecDeque}, isize};
 
 const S: usize = 10;
 
@@ -16,30 +16,51 @@ pub struct Board {
 }
 
 pub fn moves(board: &Board) -> Vec<Move> {
-    let pieces = match board.player {
-        Player::Black => &board.black,
-        Player::White => &board.white
+    let (pieces, enemy_pieces) = match board.player {
+        Player::Black => (&board.black, &board.white),
+        Player::White => (&board.white, &board.black)
     };
 
-    let mut moves = Vec::<Move>::new();
+    let mut moves = VecDeque::<Move>::new();
 
     // For each piece, see how it can move
     for p in pieces {
         let dests = reachable(&board, &p);
         // For each destination, see where the arrow can go
-        for d in dests { // TODO: this fails to shoot past where the amazon started
+        for d in dests {
             let trial = test_half_move(board, p, &d);
 
             let arrows = reachable(&trial, &d);
 
             // Add each combination to the moves list
             for a in arrows {
-                moves.push((p.clone(), d, a));
+                let m = (p.clone(), d, a);
+
+                // Heuristic: if the move shoots an arrow close to an enemy piece, it's likely good
+                let mut good = false;
+                for e in enemy_pieces {
+                    if adjacent(&a, &e) {
+                        good = true;
+                        break;
+                    }
+                }
+                if good {
+                    moves.push_front(m);
+                } else {
+                    moves.push_back(m);
+                }
             }
         }
     }
 
-    moves
+    moves.into_iter().collect()
+}
+
+pub fn adjacent(sq1: &Square, sq2: &Square) -> bool {
+    let (x1, y1) = (isize::try_from(sq1.0).unwrap(), isize::try_from(sq1.1).unwrap());
+    let (x2, y2) = (isize::try_from(sq2.0).unwrap(), isize::try_from(sq2.1).unwrap());
+
+    (x2 - x1).abs() <= 1 && (y2 - y1).abs() <= 1
 }
 
 pub fn eval_board(b: &Board) -> isize {
@@ -90,7 +111,7 @@ pub fn reachable(board: &Board, coord: &Square) -> Vec<Square> {
 
 pub fn apply_move(board: &mut Board, m: &Move) {
     let (src, dest, arrow) = m;
-    
+
     if board.black.contains(&src) {
         board.black.remove(&src);
         board.black.insert(dest.clone());
@@ -130,72 +151,75 @@ pub fn test_half_move(board: &Board, src: &Square, dest: &Square) -> Board {
     new_board
 }
 
-pub fn minimax(pos: Board, depth: usize, mut alpha: isize, mut beta: isize, white: bool) -> isize {
+pub fn minimax(pos: Board, depth: usize, mut alpha: isize, mut beta: isize) -> (isize, Move) {
+    let mut best_move = ((0, 0), (0, 0), (0, 0));
+
     if depth == 0 {
-        return eval_board(&pos)
+        return (eval_board(&pos), best_move)
     }
-
-    if white {
-        let max_eval = isize::MIN;
-        let moves = moves(&pos);
-
-        for m in moves {
-            let child = test_move(&pos, &m);
-            let eval = minimax(child, depth-1, alpha, beta, false);
-            alpha = std::cmp::max(alpha, eval);
-
-            if beta <= alpha {
-                break;
-            }
-        }
-        max_eval
-
-    } else {
-        let min_eval = isize::MAX;
-        let moves = moves(&pos);
-
-        for m in moves {
-            let child = test_move(&pos, &m);
-            let eval = minimax(child, depth-1, alpha, beta, true);
-            beta = std::cmp::min(beta, eval);
-
-            if beta <= alpha {
-                break
-            }
-        }
-        min_eval
-    }
-}
-
-pub fn decide_move(pos: &Board) -> Move {
-    let moves = moves(&pos);
 
     let white = match pos.player {
         Player::Black => false,
         Player::White => true
     };
 
-    let (mut best_eval, mut best_move);
     if white {
-        best_eval = isize::MIN;
-    } else {
-        best_eval = isize::MAX;
-    }
-    best_move = moves[0];
+        let mut max_eval = isize::MIN;
+        let moves = moves(&pos);
 
-    for m in moves {
-        let child = test_move(&pos, &m);
-        let eval = minimax(child, 0, isize::MIN, isize::MAX, white);
+        // let mut i = 0;
+        // let n_moves = moves.len();
+        for m in moves {
 
-        if white && eval > best_eval {
-            best_eval = eval;
-            best_move = m;
-        } else if !white && eval < best_eval {
-            best_eval = eval;
-            best_move = m;
+            // if depth == 2 {
+            //     // println!("Total moves: {}  Explored: {}", n_moves, i);
+            // }
+
+            let child = test_move(&pos, &m);
+            let (eval, _) = minimax(child, depth-1, alpha, beta);
+
+            // We've found a better move for white
+            if eval > max_eval {
+                max_eval = eval;
+                best_move = m;
+            }
+
+            alpha = std::cmp::max(alpha, eval);
+
+            if beta <= alpha {
+                break;
+            }
+
+            // i += 1;
         }
-    }
+        (max_eval, best_move)
 
+    } else {
+        let mut min_eval = isize::MAX;
+        let moves = moves(&pos);
+
+        for m in moves {
+            let child = test_move(&pos, &m);
+            let (eval, _) = minimax(child, depth-1, alpha, beta);
+
+            // We've found a better move for black
+            if eval < min_eval {
+                min_eval = eval;
+                best_move = m;
+            }
+
+            beta = std::cmp::min(beta, eval);
+
+            if beta <= alpha {
+                break
+            }
+        }
+        (beta, best_move)
+    }
+}
+
+pub fn decide_move(pos: &Board) -> Move {
+    let (_eval, best_move) = minimax(pos.clone(), 2, isize::MIN, isize::MAX);
     best_move
 }
 

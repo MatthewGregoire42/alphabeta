@@ -8,9 +8,9 @@ fn main() {
 
     while n_moves > 0 {
         print_board(&b);
-        println!("Eval: {}", eval_board(&b));
 
         let m = decide_move(&b);
+        println!("Move: {:?}    Eval: {}", &m, eval_board(&b));
         apply_move(&mut b, &m);
 
         n_moves = moves(&b).len();
