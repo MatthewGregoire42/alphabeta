@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, isize};
 
 const S: usize = 10;
 
@@ -128,6 +128,75 @@ pub fn test_half_move(board: &Board, src: &Square, dest: &Square) -> Board {
     }
 
     new_board
+}
+
+pub fn minimax(pos: Board, depth: usize, mut alpha: isize, mut beta: isize, white: bool) -> isize {
+    if depth == 0 {
+        return eval_board(&pos)
+    }
+
+    if white {
+        let max_eval = isize::MIN;
+        let moves = moves(&pos);
+
+        for m in moves {
+            let child = test_move(&pos, &m);
+            let eval = minimax(child, depth-1, alpha, beta, false);
+            alpha = std::cmp::max(alpha, eval);
+
+            if beta <= alpha {
+                break;
+            }
+        }
+        max_eval
+
+    } else {
+        let min_eval = isize::MAX;
+        let moves = moves(&pos);
+
+        for m in moves {
+            let child = test_move(&pos, &m);
+            let eval = minimax(child, depth-1, alpha, beta, true);
+            beta = std::cmp::min(beta, eval);
+
+            if beta <= alpha {
+                break
+            }
+        }
+        min_eval
+    }
+}
+
+pub fn decide_move(pos: &Board) -> Move {
+    let moves = moves(&pos);
+
+    let white = match pos.player {
+        Player::Black => false,
+        Player::White => true
+    };
+
+    let (mut best_eval, mut best_move);
+    if white {
+        best_eval = isize::MIN;
+    } else {
+        best_eval = isize::MAX;
+    }
+    best_move = moves[0];
+
+    for m in moves {
+        let child = test_move(&pos, &m);
+        let eval = minimax(child, 0, isize::MIN, isize::MAX, white);
+
+        if white && eval > best_eval {
+            best_eval = eval;
+            best_move = m;
+        } else if !white && eval < best_eval {
+            best_eval = eval;
+            best_move = m;
+        }
+    }
+
+    best_move
 }
 
 pub fn print_board(board: &Board) {
